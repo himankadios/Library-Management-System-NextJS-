@@ -1,0 +1,203 @@
+// Prisma schema file for Library Management & Digital File Management System
+// Database: SQLite
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("STUDENT") // ADMIN, LIBRARIAN, STUDENT
+  avatar    String?
+  status    String   @default("ACTIVE")  // ACTIVE, SUSPENDED, INACTIVE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberProfile       Member?
+  issuedTransactions  BookTransaction[] @relation("IssuedByUser")
+  returnedTransactions BookTransaction[] @relation("ReturnedByUser")
+  uploadedFiles       DigitalFile[]
+  createdFolders      Folder[]
+  activityLogs        ActivityLog[]
+  notifications       Notification[]
+}
+
+model Member {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rollNumber      String   @unique
+  regNumber       String?  @unique
+  department      String
+  course          String
+  phone           String?
+  address         String?
+  maxBooksAllowed Int      @default(4)
+  status          String   @default("ACTIVE") // ACTIVE, BLOCKED, EXPIRED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions BookTransaction[]
+  reservations Reservation[]
+  fines        Fine[]
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+
+  books Book[]
+}
+
+model Book {
+  id              String   @id @default(cuid())
+  title           String
+  author          String
+  isbn            String   @unique
+  publisher       String
+  pubYear         Int
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id])
+  language        String   @default("English")
+  description     String?
+  totalCopies     Int      @default(1)
+  availableCopies Int      @default(1)
+  shelfNumber     String?
+  coverImage      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions BookTransaction[]
+  reservations Reservation[]
+}
+
+model BookTransaction {
+  id          String    @id @default(cuid())
+  bookId      String
+  book        Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  issueDate   DateTime  @default(now())
+  dueDate     DateTime
+  returnDate  DateTime?
+  status      String    @default("ISSUED") // ISSUED, RETURNED, OVERDUE
+  fineAmount  Float     @default(0.0)
+  notes       String?
+  issuedById  String?
+  issuedBy    User?     @relation("IssuedByUser", fields: [issuedById], references: [id])
+  returnedById String?
+  returnedBy  User?     @relation("ReturnedByUser", fields: [returnedById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  fines Fine[]
+}
+
+model Reservation {
+  id          String    @id @default(cuid())
+  bookId      String
+  book        Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  requestDate DateTime  @default(now())
+  status      String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, FULFILLED
+  notes       String?
+  expiryDate  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Fine {
+  id            String          @id @default(cuid())
+  transactionId String
+  transaction   BookTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  amount        Float
+  status        String          @default("UNPAID") // UNPAID, PAID, WAIVED
+  paidDate      DateTime?
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Folder {
+  id           String   @id @default(cuid())
+  name         String
+  parentId     String?
+  parent       Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  subfolders   Folder[] @relation("FolderHierarchy")
+  category     String   @default("Academic Materials") // Academic Materials, Research Papers, Question Papers, Assignments, E-Books, Notes, Administrative Documents
+  allowedRoles String   @default("ALL") // ALL, ADMIN_LIBRARIAN, ADMIN_ONLY
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  files DigitalFile[]
+}
+
+model DigitalFile {
+  id            String   @id @default(cuid())
+  name          String
+  originalName  String
+  fileType      String   // pdf, docx, xlsx, pptx, txt, jpg, png, zip
+  mimeType      String
+  fileSize      Int      // in bytes
+  category      String   @default("Academic Materials")
+  description   String?
+  folderId      String?
+  folder        Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  storagePath   String
+  allowedRoles  String   @default("ALL") // ALL, ADMIN_LIBRARIAN, ADMIN_ONLY
+  isPublic      Boolean  @default(true)
+  downloadCount Int      @default(0)
+  uploadedById  String
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, SUCCESS, WARNING, DANGER
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // CREATE, UPDATE, DELETE, ISSUE, RETURN, UPLOAD, DOWNLOAD, LOGIN
+  entity    String   // Book, Member, Transaction, DigitalFile, Folder, User, Setting
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
